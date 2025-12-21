@@ -1,8 +1,8 @@
 blueprint:
   name: Motion Light – Advanced (Day/Night, Fade, Manual Override)
   description: >
-    Motion-activated light with day/night brightness, separate timeouts,
-    manual override detection, optional "only if light is off", and fade-in/out transitions.
+    Motion‑activated lighting with day/night brightness, fade transitions,
+    manual override detection, optional "only if off", and separate day/night timeouts.
   domain: automation
 
   input:
@@ -27,7 +27,6 @@ blueprint:
           min: 1
           max: 100
           unit_of_measurement: "%"
-          mode: slider
 
     night_brightness:
       name: Night Brightness (%)
@@ -37,23 +36,21 @@ blueprint:
           min: 1
           max: 100
           unit_of_measurement: "%"
-          mode: slider
 
     day_timeout:
-      name: Day No-Motion Timeout
+      name: Day No‑Motion Timeout
       default: "00:03:00"
       selector:
         duration:
 
     night_timeout:
-      name: Night No-Motion Timeout
+      name: Night No‑Motion Timeout
       default: "00:05:00"
       selector:
         duration:
 
     only_if_off:
       name: Only turn on if light is off
-      description: If enabled, motion will not re-trigger if the light is already on.
       default: true
       selector:
         boolean:
@@ -85,6 +82,7 @@ blueprint:
           max: 60
           unit_of_measurement: seconds
 
+mode: restart
 
 trigger:
   - platform: state
@@ -97,15 +95,13 @@ action:
       - conditions:
           - condition: template
             value_template: >
-              {{ not is_state('!input target_light', 'on')
-                 or not !input only_if_off }}
+              {{ not is_state(inputs.target_light, 'on') or not inputs.only_if_off }}
         sequence: []
     default:
       - stop: "Light already on and only_if_off enabled"
 
   # Turn on light with fade (day/night)
   - choose:
-      # Daytime
       - conditions:
           - condition: sun
             after: sunrise
@@ -118,7 +114,6 @@ action:
               brightness_pct: !input day_brightness
               transition: !input day_fade
 
-      # Nighttime
       - conditions:
           - condition: sun
             after: sunset
@@ -132,7 +127,7 @@ action:
               transition: !input night_fade
 
   # Wait for either:
-  # 1) Manual light off (override)
+  # 1) Manual light off
   # 2) Motion stopped long enough (day/night timeout)
   - wait_for_trigger:
       - platform: state
@@ -142,12 +137,13 @@ action:
       - platform: state
         entity_id: !input motion_sensor
         to: "off"
-        for: >
-          {% if is_state('sun.sun', 'above_horizon') %}
-            {{ !input day_timeout }}
-          {% else %}
-            {{ !input night_timeout }}
-          {% endif %}
+        for:
+          seconds: >
+            {% if is_state('sun.sun', 'above_horizon') %}
+              {{ (inputs.day_timeout | as_timedelta).total_seconds() }}
+            {% else %}
+              {{ (inputs.night_timeout | as_timedelta).total_seconds() }}
+            {% endif %}
 
   # If light was manually turned off → stop
   - condition: state
@@ -160,5 +156,3 @@ action:
       entity_id: !input target_light
     data:
       transition: !input off_fade
-
-mode: restart
