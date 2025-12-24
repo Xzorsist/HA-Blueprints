@@ -1,0 +1,113 @@
+blueprint:
+  name: Send Shopping List on Zone Entry
+  description: >
+    Sends an actionable notification when a selected person enters a selected
+    zone and the shopping list has items. Includes a cooldown so you don't get
+    spammed. "Yes" opens a provided URL (e.g. Nabu Casa page of the shopping list).
+  domain: automation
+  source_url: https://example.com/blueprints/send_shopping_list_on_enter_zone
+  input:
+    person_entity:
+      name: Person
+      description: Person entity to monitor.
+      selector:
+        entity:
+          domain: person
+
+    target_zone:
+      name: Zone name (state the person must enter)
+      description: >
+        The state your person changes to when entering (e.g., "Aldi", "Home", "Tesco").
+        This should match exactly how the zone appears in the person's state.
+      default: Aldi
+      selector:
+        text:
+
+    todo_entity:
+      name: Shopping List (todo entity)
+      description: Select the shopping list entity.
+      selector:
+        entity:
+          domain: todo
+
+    notify_service:
+      name: Mobile notify service
+      description: >
+        The mobile app notify service to send the notification to, e.g.
+        'notify.mobile_app_sm_s938b'.
+      selector:
+        text:
+
+    open_url:
+      name: URL to open on "Yes"
+      description: >
+        Absolute or relative URL to open. For Android URI action, use absolute URL.
+        Example: https://<your_nabu_casa>.ui.nabu.casa/todo?entity_id=todo.shopping_list
+      selector:
+        text:
+
+    notification_title:
+      name: Notification title
+      default: You are in Aldi!
+      selector:
+        text:
+
+    notification_message:
+      name: Notification message
+      default: >
+        Would you like to open the shopping list? There are items on it that are needed.
+      selector:
+        text:
+
+    cooldown_minutes:
+      name: Cooldown (minutes)
+      description: Minimum minutes between notifications.
+      default: 60
+      selector:
+        number:
+          min: 1
+          max: 240
+          mode: box
+
+mode: single
+
+variables:
+  v_person: !input person_entity
+  v_zone: !input target_zone
+  v_todo: !input todo_entity
+  v_notify: !input notify_service
+  v_url: !input open_url
+  v_title: !input notification_title
+  v_message: !input notification_message
+  v_cooldown: !input cooldown_minutes
+
+triggers:
+  - trigger: state
+    entity_id: !input person_entity
+    to: !input target_zone
+
+conditions:
+  # Shopping list must have items (> 0)
+  - condition: template
+    value_template: "{{ states(v_todo) | int > 0 }}"
+
+  # Cooldown using this automation's last_triggered
+  - condition: template
+    value_template: >-
+      {% set lt = state_attr(this.entity_id, 'last_triggered') %}
+      {{ lt is none or (now() - lt) > timedelta(minutes=v_cooldown | int) }}
+
+actions:
+  - action: !input notify_service
+    data:
+      title: "{{ v_title }}"
+      message: "{{ v_message }}"
+      data:
+        # Optional: uncomment url if you want tapping the notification body to also open the list
+        # url: "{{ v_url }}"
+        actions:
+          - action: URI
+            title: "YES"
+            uri: "{{ v_url }}"
+          - action: DISMISS
+            title: "NO"
